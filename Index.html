@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <title>AR Microwave</title>
+
+  <!-- A-Frame -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <!-- AR.js -->
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    /* แผงควบคุม */
+    #controls {
+      position: fixed;
+      z-index: 9999;
+      left: 50%;
+      bottom: 25px;
+      transform: translateX(-50%);
+
+      display: flex;
+      gap: 12px;
+
+      padding: 12px;
+
+      background: rgba(0, 0, 0, 0.65);
+      border-radius: 18px;
+      backdrop-filter: blur(8px);
+    }
+
+    .btn {
+      border: none;
+      border-radius: 12px;
+      padding: 14px 20px;
+
+      color: white;
+      font-size: 17px;
+      font-weight: bold;
+
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    #heatBtn {
+      background: #e53935;
+    }
+
+    #doorBtn {
+      background: #1976d2;
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    #status {
+      position: fixed;
+      z-index: 9999;
+      top: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+
+      padding: 10px 18px;
+
+      color: white;
+      background: rgba(0,0,0,0.65);
+      border-radius: 20px;
+
+      font-size: 15px;
+    }
+  </style>
+
+  <script>
+    let microwaveFound = false;
+    let heating = false;
+    let doorOpen = false;
+
+    /*
+     * สร้างไมโครเวฟ
+     */
+    AFRAME.registerComponent('microwave', {
+
+      init: function () {
+
+        const microwave = this.el;
+
+        // =========================
+        // ตัวเครื่อง
+        // =========================
+        const body = document.createElement('a-box');
+
+        body.setAttribute('position', '0 0.35 0');
+        body.setAttribute('width', '1.8');
+        body.setAttribute('height', '0.7');
+        body.setAttribute('depth', '1.1');
+
+        body.setAttribute('color', '#555');
+
+        microwave.appendChild(body);
+
+
+        // =========================
+        // หน้าต่างไมโครเวฟ
+        // =========================
+        const windowBox = document.createElement('a-box');
+
+        windowBox.setAttribute('position', '0 0.38 0.56');
+        windowBox.setAttribute('width', '1.25');
+        windowBox.setAttribute('height', '0.48');
+        windowBox.setAttribute('depth', '0.04');
+
+        windowBox.setAttribute('color', '#111');
+        windowBox.setAttribute('material',
+          'color:#111; opacity:0.85; metalness:0.3; roughness:0.2'
+        );
+
+        microwave.appendChild(windowBox);
+
+
+        // =========================
+        // แผงปุ่มด้านขวา
+        // =========================
+        const panel = document.createElement('a-box');
+
+        panel.setAttribute('position', '0.72 0.38 0.57');
+        panel.setAttribute('width', '0.28');
+        panel.setAttribute('height', '0.48');
+        panel.setAttribute('depth', '0.05');
+
+        panel.setAttribute('color', '#222');
+
+        microwave.appendChild(panel);
+
+
+        // =========================
+        // จอ Digital
+        // =========================
+        const display = document.createElement('a-box');
+
+        display.setAttribute('position', '0.72 0.58 0.61');
+        display.setAttribute('width', '0.2');
+        display.setAttribute('height', '0.08');
+        display.setAttribute('depth', '0.02');
+
+        display.setAttribute('color', '#00ff66');
+
+        microwave.appendChild(display);
+
+
+        // =========================
+        // จานหมุน
+        // =========================
+        const plate = document.createElement('a-cylinder');
+
+        plate.setAttribute('position', '0 0.17 0');
+        plate.setAttribute('radius', '0.42');
+        plate.setAttribute('height', '0.025');
+
+        plate.setAttribute('color', '#ddd');
+
+        microwave.appendChild(plate);
+
+        this.plate = plate;
+
+
+        // =========================
+        // อาหาร
+        // =========================
+        const food = document.createElement('a-cylinder');
+
+        food.setAttribute('position', '0 0.25 0');
+        food.setAttribute('radius', '0.22');
+        food.setAttribute('height', '0.12');
+
+        food.setAttribute('color', '#d2691e');
+
+        microwave.appendChild(food);
+
+        this.food = food;
+
+
+        // =========================
+        // ประตู
+        // =========================
+        const door = document.createElement('a-box');
+
+        door.setAttribute('position', '0 0.35 0.62');
+        door.setAttribute('width', '1.8');
+        door.setAttribute('height', '0.7');
+        door.setAttribute('depth', '0.06');
+
+        door.setAttribute('color', '#333');
+
+        microwave.appendChild(door);
+
+        this.door = door;
+
+
+        // =========================
+        // มือจับ
+        // =========================
+        const handle = document.createElement('a-box');
+
+        handle.setAttribute('position', '0.7 0.35 0.69');
+        handle.setAttribute('width', '0.08');
+        handle.setAttribute('height', '0.45');
+        handle.setAttribute('depth', '0.08');
+
+        handle.setAttribute('color', '#aaa');
+
+        microwave.appendChild(handle);
+
+        this.handle = handle;
+
+
+        // =========================
+        // Animation จานหมุน
+        // =========================
+        plate.setAttribute(
+          'animation__rotate',
+          'property: rotation; to: 0 360 0; loop: true; dur: 1200; easing: linear; startEvents: heat'
+        );
+
+        // =========================
+        // Animation ประตู
+        // =========================
+
+        door.setAttribute(
+          'animation__open',
+          'property: rotation; to: 0 -70 0; dur: 700; easing: easeOutQuad; startEvents: open'
+        );
+
+        door.setAttribute(
+          'animation__close',
+          'property: rotation; to: 0 0 0; dur: 700; easing: easeOutQuad; startEvents: close'
+        );
+
+        handle.setAttribute(
+          'animation__open',
+          'property: rotation; to: 0 -70 0; dur: 700; easing: easeOutQuad; startEvents: open'
+        );
+
+        handle.setAttribute(
+          'animation__close',
+          'property: rotation; to: 0 0 0; dur: 700; easing: easeOutQuad; startEvents: close'
+        );
+
+
+        // =========================
+        // Animation อาหารตอนร้อน
+        // =========================
+        food.setAttribute(
+          'animation__heat',
+          'property: material.color; to: #ff3300; dur: 500; loop: true; dir: alternate; startEvents: heat'
+        );
+      }
+    });
+
+
+    /*
+     * ปุ่มความร้อน
+     */
+    function toggleHeat() {
+
+      const microwave = document.querySelector('#microwave');
+
+      if (!microwaveFound) {
+        alert('กรุณาส่อง Hiro Marker ก่อน');
+        return;
+      }
+
+      const plate =
+        microwave.components.microwave.plate;
+
+      const food =
+        microwave.components.microwave.food;
+
+      if (!heating) {
+
+        heating = true;
+
+        plate.emit('heat');
+        food.emit('heat');
+
+        document.getElementById('heatBtn').innerText =
+          '⏹ หยุดความร้อน';
+
+        document.getElementById('status').innerText =
+          '🔥 กำลังอุ่นอาหาร...';
+
+      } else {
+
+        heating = false;
+
+        plate.removeAttribute('animation__rotate');
+
+        food.removeAttribute('animation__heat');
+
+        document.getElementById('heatBtn').innerText =
+          '🔥 ความร้อน';
+
+        document.getElementById('status').innerText =
+          'พร้อมใช้งาน';
+      }
+    }
+
+
+    /*
+     * ปุ่มเปิด/ปิดฝา
+     */
+    function toggleDoor() {
+
+      const microwave = document.querySelector('#microwave');
+
+      if (!microwaveFound) {
+        alert('กรุณาส่อง Hiro Marker ก่อน');
+        return;
+      }
+
+      const door =
+        microwave.components.microwave.door;
+
+      const handle =
+        microwave.components.microwave.handle;
+
+
+      if (!doorOpen) {
+
+        // ถ้าเปิดประตู ให้หยุดความร้อน
+        if (heating) {
+          heating = false;
+
+          microwave.components.microwave.plate
+            .removeAttribute('animation__rotate');
+
+          microwave.components.microwave.food
+            .removeAttribute('animation__heat');
+
+          document.getElementById('heatBtn').innerText =
+            '🔥 ความร้อน';
+        }
+
+        doorOpen = true;
+
+        door.emit('open');
+        handle.emit('open');
+
+        document.getElementById('doorBtn').innerText =
+          '🚪 ปิดฝา';
+
+        document.getElementById('status').innerText =
+          '🚪 เปิดประตูไมโครเวฟ';
+
+      } else {
+
+        doorOpen = false;
+
+        door.emit('close');
+        handle.emit('close');
+
+        document.getElementById('doorBtn').innerText =
+          '🚪 เปิดฝา';
+
+        document.getElementById('status').innerText =
+          'พร้อมใช้งาน';
+      }
+    }
+
+
+    /*
+     * เมื่อพบ Hiro Marker
+     */
+    window.addEventListener('load', function () {
+
+      const marker = document.querySelector('#hiroMarker');
+
+      marker.addEventListener('markerFound', function () {
+
+        microwaveFound = true;
+
+        document.getElementById('status').innerText =
+          '✅ พบ Hiro Marker — ไมโครเวฟพร้อมใช้งาน';
+
+      });
+
+
+      marker.addEventListener('markerLost', function () {
+
+        microwaveFound = false;
+
+        document.getElementById('status').innerText =
+          '🔍 กรุณาส่อง Hiro Marker';
+
+      });
+
+    });
+  </script>
+</head>
+
+
+<body>
+
+  <!-- สถานะ -->
+  <div id="status">
+    🔍 กรุณาส่อง Hiro Marker
+  </div>
+
+
+  <!-- ปุ่มควบคุม -->
+  <div id="controls">
+
+    <button
+      id="heatBtn"
+      class="btn"
+      onclick="toggleHeat()">
+      🔥 ความร้อน
+    </button>
+
+    <button
+      id="doorBtn"
+      class="btn"
+      onclick="toggleDoor()">
+      🚪 เปิดฝา
+    </button>
+
+  </div>
+
+
+  <!-- AR Scene -->
+  <a-scene
+    embedded
+    vr-mode-ui="enabled: false"
+
+    renderer="
+      antialias: true;
+      alpha: true;
+      colorManagement: true;
+    "
+
+    arjs="
+      sourceType: webcam;
+      detectionMode: mono_and_matrix;
+      matrixCodeType: 3x3;
+    ">
+
+
+    <!-- Hiro Marker -->
+    <a-marker
+      id="hiroMarker"
+      preset="hiro">
+
+      <!-- ไมโครเวฟ -->
+      <a-entity
+        id="microwave"
+        microwave
+        position="0 0 0"
+        scale="0.75 0.75 0.75">
+
+      </a-entity>
+
+    </a-marker>
+
+
+    <!-- กล้อง AR -->
+    <a-entity camera></a-entity>
+
+  </a-scene>
+
+</body>
+</html>
